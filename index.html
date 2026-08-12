@@ -745,8 +745,18 @@ const TIERS = [
   ["D","Modelled","#e0a060","Recipe taken from the master production workbook"],
   ["E","Not attributed","#9b948a","No reliable recipe — listed separately, never spread"]
 ];
-const fmt = n => n>=1e6 ? (n/1e6).toFixed(2)+"M" : n>=1e4 ? Math.round(n).toLocaleString()
-  : n>=100 ? Math.round(n).toLocaleString() : n.toFixed(1);
+/* One rule for every figure on the page. Mixing "1.15M" with "98,431" on the same
+   line, and printing "0.0" for nothing, made the charts hard to read and made
+   comparable numbers look like different kinds of thing. Whole units with
+   thousands separators throughout; a decimal only below 10, where it carries
+   real information. */
+const fmt = n => {
+  if(n===null||n===undefined||isNaN(n)) return "—";
+  const a=Math.abs(n);
+  if(a<0.05) return "0";
+  if(a<10) return (Math.round(n*10)/10).toLocaleString(undefined,{maximumFractionDigits:1});
+  return Math.round(n).toLocaleString();
+};
 const money = n => "$"+Math.round(n).toLocaleString();
 const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
@@ -856,17 +866,21 @@ makeTable("tbll",  allL,  "L",  "ql");
 /* ── bar charts ── */
 function bars(el, rows, unit){
   if(!rows.length){el.innerHTML="<p class='muted'>Nothing to show.</p>";return;}
-  const W=880,rowH=27,PADL=258,PADR=92,PADT=6,H=PADT+rows.length*rowH+8;
-  const max=Math.max(...rows.map(r=>r.total))*1.02;
+  /* Values sit in a fixed right-hand column, right-aligned, rather than floating at
+     the end of each bar — otherwise they stagger across the chart and cannot be
+     compared down the page. The plot area stops short of that column. */
+  const W=900,rowH=27,PADL=250,VALW=104,PADT=6,PADR=10;
+  const plot=W-PADL-VALW-PADR, H=PADT+rows.length*rowH+8;
+  const max=Math.max(...rows.map(r=>r.total))*1.02||1;
   const cols=["#1b9690","#d9742b","#7c4a7a"];
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Largest raw materials">`;
   rows.forEach((r,i)=>{
-    const y=PADT+i*rowH,w=Math.max(2,(r.total/max)*(W-PADL-PADR));
-    s+=`<text x="${PADL-10}" y="${y+16}" text-anchor="end" font-size="12.5" fill="#1a1714">${
-      esc(r.name.length>38?r.name.slice(0,37)+"…":r.name)}</text>`;
+    const y=PADT+i*rowH,w=Math.max(2,(r.total/max)*plot);
+    s+=`<text x="${PADL-12}" y="${y+16}" text-anchor="end" font-size="12.5" fill="#1a1714">${
+      esc(r.name.length>34?r.name.slice(0,33)+"…":r.name)}<title>${esc(r.name)}</title></text>`;
     s+=`<rect x="${PADL}" y="${y+4}" width="${w}" height="15" rx="2" fill="${cols[i%3]}">
       <title>${esc(r.name)}: ${fmt(r.total)} ${unit}</title></rect>`;
-    s+=`<text x="${PADL+w+8}" y="${y+16}" font-size="11.5" fill="#6b665e"
+    s+=`<text x="${W-PADR}" y="${y+16}" text-anchor="end" font-size="11.5" fill="#3a3630"
       font-family="Oswald,sans-serif" font-weight="700">${fmt(r.total)}</text>`;
   });
   el.innerHTML=s+"</svg>";
@@ -877,20 +891,26 @@ bars(document.getElementById("topl"),  liquids.slice(0,20), "L");
 /* ── year on year ── */
 (function(){
   const rows=solids.slice(0,15);
-  const W=880,rowH=34,PADL=258,PADR=110,PADT=8,H=PADT+rows.length*rowH+10;
+  const W=900,rowH=34,PADL=250,VALW=190,PADT=8,PADR=10;
+  const plot=W-PADL-VALW-PADR, H=PADT+rows.length*rowH+10;
   const max=Math.max(...rows.map(r=>Math.max(r.yr1,r.yr2)))*1.02||1;
   let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Year on year">`;
   rows.forEach((r,i)=>{
     const y=PADT+i*rowH;
-    const w1=Math.max(2,(r.yr1/max)*(W-PADL-PADR)),w2=Math.max(2,(r.yr2/max)*(W-PADL-PADR));
-    s+=`<text x="${PADL-10}" y="${y+19}" text-anchor="end" font-size="12.5">${
-      esc(r.name.length>38?r.name.slice(0,37)+"…":r.name)}</text>`;
+    const w1=Math.max(2,(r.yr1/max)*plot),w2=Math.max(2,(r.yr2/max)*plot);
+    s+=`<text x="${PADL-12}" y="${y+19}" text-anchor="end" font-size="12.5">${
+      esc(r.name.length>34?r.name.slice(0,33)+"…":r.name)}<title>${esc(r.name)}</title></text>`;
     s+=`<rect x="${PADL}" y="${y+3}" width="${w1}" height="11" rx="2" fill="#b9b2a7">
       <title>Yr 1 ${fmt(r.yr1)}</title></rect>`;
     s+=`<rect x="${PADL}" y="${y+16}" width="${w2}" height="11" rx="2" fill="#1b9690">
       <title>Yr 2 ${fmt(r.yr2)}</title></rect>`;
-    s+=`<text x="${PADL+Math.max(w1,w2)+8}" y="${y+19}" font-size="11"
-      font-family="Oswald,sans-serif" fill="#6b665e">${fmt(r.yr1)} → ${fmt(r.yr2)}</text>`;
+    // yr1 → yr2 as two right-aligned columns so the pairs line up down the page
+    s+=`<text x="${W-PADR-96}" y="${y+19}" text-anchor="end" font-size="11"
+      font-family="Oswald,sans-serif" fill="#8a847b">${fmt(r.yr1)}</text>`;
+    s+=`<text x="${W-PADR-84}" y="${y+19}" font-size="11"
+      font-family="Oswald,sans-serif" fill="#b0a99f">→</text>`;
+    s+=`<text x="${W-PADR}" y="${y+19}" text-anchor="end" font-size="11"
+      font-family="Oswald,sans-serif" font-weight="700" fill="#1b9690">${fmt(r.yr2)}</text>`;
   });
   document.getElementById("yoykg").innerHTML=s+"</svg>"+
     `<div class="legend"><span><i style="background:#b9b2a7"></i>Year 1 (Aug 24–Jul 25)</span>
