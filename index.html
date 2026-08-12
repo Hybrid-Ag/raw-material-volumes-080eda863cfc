@@ -445,6 +445,8 @@ td .nm{font-weight:600}
 .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:12px;color:var(--grey);margin:10px 0 0}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:11px;height:11px;border-radius:2px;display:inline-block}
+select#drillpick{font:inherit;font-size:14px;padding:9px 12px;border:1px solid var(--stroke);
+  border-radius:var(--r);background:#fff;max-width:min(560px,100%);width:100%}
 input[type=search]{font:inherit;font-size:13.5px;padding:8px 12px;border:1px solid var(--stroke);
   border-radius:var(--r);width:min(340px,100%);background:#fff;margin:0 0 12px}
 pre.verif{background:#fff;border:1px solid var(--stroke);border-radius:var(--r);
@@ -631,7 +633,13 @@ pre.verif{background:#fff;border:1px solid var(--stroke);border-radius:var(--r);
     <p class="lede">Pick a raw material to see the finished products consuming it, and
       how much each one accounts for.</p>
   </div></div></div>
-  <div class="wrap"><div id="drill" class="blk"></div></div>
+  <div class="wrap">
+    <section class="blk">
+      <h3 class="sub">Choose a raw material</h3>
+      <p style="margin:0 0 12px"><select id="drillpick"></select></p>
+    </section>
+    <div id="drill" class="blk"></div>
+  </div>
 </div>
 
 <!-- ══ YEAR ON YEAR ══ -->
@@ -880,11 +888,25 @@ bars(document.getElementById("topl"),  liquids.slice(0,20), "L");
     </div>`).join("");
 })();
 
-/* ── drill-down ── */
-function showDrill(name){
+/* ── drill-down ──
+   The tab has to stand on its own: previously it showed nothing until you happened
+   to click a row on another tab, so opening it directly looked broken. It now has
+   its own picker and defaults to the largest material. */
+const DRILLABLE = RAWVOL.raws.filter(r=>r.products && r.products.length);
+(function(){
+  const sel=document.getElementById("drillpick");
+  sel.innerHTML = DRILLABLE.map(r=>
+    `<option value="${esc(r.name)}">${esc(r.name)} — ${fmt(r.total)} ${r.unit}</option>`
+  ).join("");
+  sel.onchange=()=>showDrill(sel.value,false);
+})();
+
+function showDrill(name, jump=true){
   const r=RAWVOL.raws.find(x=>x.name===name);
   const el=document.getElementById("drill");
-  if(!r){el.innerHTML="<p class='intro'>Pick a material on the Solids or Liquids tab.</p>";return;}
+  if(!r){el.innerHTML="<p class='intro'>No detail recorded for this material.</p>";return;}
+  const sel=document.getElementById("drillpick");
+  if(sel && sel.value!==r.name) sel.value=r.name;
   const max=Math.max(...r.products.map(p=>p[1]));
   el.innerHTML=`<h3 class="sub">${esc(r.name)}</h3>
     <div class="specbar">
@@ -901,10 +923,10 @@ function showDrill(name){
       <td><span class="mini"><i style="width:${(q/max*100).toFixed(1)}%;background:var(--a)"></i></span></td>
       </tr>`).join("")+`</tbody></table></div>`;
   el.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>select(b.dataset.go,true));
-  select("product",true);
+  if(jump) select("product",true);
 }
-document.getElementById("drill").innerHTML =
-  "<p class='intro'>Pick a material on the Solids or Liquids tab to see which finished products drive it.</p>";
+// default view so the tab is never empty
+if(DRILLABLE.length) showDrill(DRILLABLE[0].name,false);
 
 /* ── method tables ── */
 document.getElementById("tiertable").innerHTML =
